@@ -1,115 +1,289 @@
-.root {
-
+.page {
+  min-height: 100vh;
+  background: radial-gradient(circle at top, #28355f 0, #101527 48%, #090b13 100%);
+  color: #fff4df;
+  font-family: Tahoma, Arial, sans-serif;
+  padding: 32px clamp(16px, 4vw, 56px) 56px;
 }
 
-.collectionContainer {
-    margin-top: 8px;
+.hero {
+  text-align: center;
+  max-width: 920px;
+  margin: 0 auto 28px;
 }
 
-.promotionContainer {
-    position: relative;
+.language {
+  margin-bottom: 24px;
+  color: #f7c66a;
+  font-weight: 700;
 }
 
-.promotionContainer h2 {
-    font-size: 52px;
-    line-height: 62px;
+.logoMark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 96px;
+  padding: 16px 42px;
+  margin-bottom: 20px;
+  border: 6px solid #111827;
+  border-radius: 24px;
+  background: linear-gradient(135deg, #f6d47b, #b97831);
+  box-shadow: 0 18px 0 #0c1020, 0 30px 50px rgba(0, 0, 0, 0.35);
+  color: #19213b;
+  font-size: clamp(36px, 7vw, 76px);
+  font-weight: 900;
+  letter-spacing: -3px;
 }
 
-
-.messageContainer {
-    text-align: center;
-    padding: 60px 0px;
-    margin: 0px 30px;
+.hero h1 {
+  margin: 12px 0;
+  font-size: clamp(30px, 5vw, 58px);
 }
 
-.messageContainer p {
-    text-transform: uppercase;
-    font-weight: 500;
-    font-size: 14px;
-    line-height: 17px;
-    text-align: center;
+.hero p {
+  margin: 0 auto 24px;
+  max-width: 720px;
+  color: #d7dced;
+  font-size: 18px;
+  line-height: 1.9;
 }
 
-.gold {
-    color: var(--standard-gold);
+.joinCard,
+.roomBanner,
+.settingsPanel,
+.gameShell,
+.instructions {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 26px;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(16px);
 }
 
-.contentTitle{
-    text-align: center;
-    font-weight: normal;
-    font-size: 42px;
-    line-height: 50px;
-    margin-bottom: 16px;
+.joinCard {
+  display: flex;
+  gap: 12px;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 12px;
 }
 
-.newArrivalsContainer {
-    margin-top: 64px;
+.joinCard input,
+.settingsPanel select {
+  width: 100%;
+  border: 0;
+  border-radius: 16px;
+  background: #f8ead0;
+  color: #151827;
+  font-size: 16px;
+  padding: 16px;
 }
 
-.highlightContainer {
-    margin: 88px 0px;
+button {
+  cursor: pointer;
 }
 
-.linkContainers {
-    display: flex;
-    position: absolute;
-    transform: translate(-50%, 0%);
-    bottom: 64px;
-    left: 50%;
-    gap: 72px;
+.joinCard button,
+.primaryAction,
+.scoreBoard button {
+  border: 0;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #f9d16b, #e37d33);
+  color: #121728;
+  font-weight: 900;
+  padding: 14px 22px;
 }
 
-.ctaCustomButton {
-    margin-top: 50px;
+.roomBanner {
+  display: inline-flex;
+  gap: 24px;
+  padding: 18px 26px;
+  color: #fff;
 }
 
-.linkContainers a {
-    color: var(--standard-white);
-    border-bottom: 1px solid var(--standard-white);
-    font-weight: 500;
-    font-size: 14px;
-    line-height: 17px;
-    text-transform: uppercase;
-    transition: all 0.3s ease-in-out;
+.settingsPanel {
+  display: grid;
+  grid-template-columns: 1.7fr 1fr 1fr auto;
+  gap: 18px;
+  max-width: 1180px;
+  margin: 0 auto 24px;
+  padding: 20px;
+  align-items: end;
 }
 
-.linkContainers a:hover {
-    color: var(--standard-gold);
-    border-bottom: 1px solid var(--standard-gold);
+.settingsPanel label {
+  display: block;
+  margin-bottom: 10px;
+  color: #f7c66a;
+  font-weight: 800;
 }
 
-.blogsContainer {
-    margin-top: 96px;
+.segmented {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
 }
 
-.sustainableContainer {
-    margin: 96px 40px 0px 40px;
+.segmented button {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  padding: 14px;
+  font-weight: 800;
 }
 
-.socialContainer {
-    margin-top: 64px;
+.activeBlue { background: #2077d4 !important; }
+.activeRed { background: #d13d35 !important; }
+.activeNeutral { background: #77726b !important; }
+
+.gameShell {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 24px;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 24px;
 }
 
-.socialContentGrid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
+.scoreBoard h2 { margin-top: 0; }
+
+.teamCardBlue,
+.teamCardRed,
+.turnBox {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-radius: 18px;
+  margin-bottom: 14px;
+  padding: 18px;
+  font-weight: 900;
 }
 
-.socialContentGrid img {
-    width: 100%;
-    object-fit: cover;
+.teamCardBlue { background: #174f98; }
+.teamCardRed { background: #9f2725; }
+.turnBox { background: rgba(255, 255, 255, 0.12); }
+
+.scoreBoard button { width: 100%; }
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(110px, 1fr));
+  gap: 12px;
 }
 
-@media (max-width: 800px) {
-    .sustainableContainer {
-        margin: 96px 0px 0px 0px;
-    }
+.card {
+  min-height: 102px;
+  border: 0;
+  border-bottom: 8px solid #a76933;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #ffe9bd, #d59a58);
+  color: #251a12;
+  box-shadow: 0 8px 0 rgba(0, 0, 0, 0.22);
+  font-size: 22px;
+  font-weight: 900;
+  transition: transform 0.16s ease, filter 0.16s ease;
+}
 
-    .socialContentGrid {
-        grid-template-columns: repeat(2, 1fr);
-    }
+.card:hover { transform: translateY(-3px); }
+.card small { display: block; margin-top: 8px; font-size: 12px; }
+.spyHint { outline: 4px solid rgba(255, 255, 255, 0.18); }
+.blue { background: linear-gradient(180deg, #56a7ff, #1d5fa8); color: white; border-bottom-color: #123965; }
+.red { background: linear-gradient(180deg, #ff7970, #b62824); color: white; border-bottom-color: #6e1716; }
+.neutral { background: linear-gradient(180deg, #d8d0c1, #8c8170); color: white; border-bottom-color: #574f43; }
+.assassin { background: linear-gradient(180deg, #33394d, #06070b); color: white; border-bottom-color: #000; }
 
-    .highlightContainer {
-        margin: 88px 0px 40px 0px;
-    }
+.instructions {
+  max-width: 1180px;
+  margin: 24px auto 0;
+  padding: 24px 32px;
+}
+
+.instructions h2 { margin-top: 0; }
+.instructions li { margin: 10px 0; line-height: 1.8; }
+
+@media (max-width: 900px) {
+  .settingsPanel,
+  .gameShell {
+    grid-template-columns: 1fr;
+  }
+
+  .board {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .joinCard,
+  .roomBanner {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 560px) {
+  .board {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .card {
+    min-height: 86px;
+    font-size: 18px;
+  }
+}
+
+.demoButton {
+  background: rgba(255, 255, 255, 0.15) !important;
+  color: #fff !important;
+  border: 1px solid rgba(255, 255, 255, 0.25) !important;
+}
+
+.clueForm,
+.currentClue,
+.logPanel {
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 16px;
+  margin-bottom: 14px;
+}
+
+.clueForm label,
+.currentClue span {
+  display: block;
+  color: #f7c66a;
+  font-weight: 900;
+  margin-bottom: 8px;
+}
+
+.clueForm input,
+.clueForm select {
+  width: 100%;
+  border: 0;
+  border-radius: 12px;
+  background: #f8ead0;
+  color: #151827;
+  font-size: 15px;
+  margin-bottom: 8px;
+  padding: 12px;
+}
+
+.currentClue strong {
+  display: block;
+  font-size: 22px;
+}
+
+.card:disabled {
+  cursor: not-allowed;
+  filter: grayscale(0.35) opacity(0.75);
+}
+
+.logPanel {
+  margin-bottom: 24px;
+}
+
+.logPanel h3 {
+  margin-top: 0;
+}
+
+.logPanel p {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  margin: 0;
+  padding: 10px 0;
 }
