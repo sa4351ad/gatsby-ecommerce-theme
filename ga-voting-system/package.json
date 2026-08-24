@@ -1,0 +1,24 @@
+{
+  "name": "ga-voting-system",
+  "private": true,
+  "version": "1.0.0",
+  "description": "نظام إدارة الجمعيات العمومية والتصويت الإلكتروني",
+  "scripts": {
+    "dev:api": "pnpm --filter @ga/api dev",
+    "dev:web": "pnpm --filter @ga/web dev",
+    "build": "pnpm -r build",
+    "db:generate": "pnpm --filter @ga/db exec prisma generate",
+    "db:migrate": "pnpm --filter @ga/db exec prisma migrate dev",
+    "db:deploy": "pnpm --filter @ga/db exec prisma migrate deploy",
+    "db:seed": "pnpm --filter @ga/db exec tsx prisma/seed.ts",
+    "test:api": "pnpm --filter @ga/api test",
+    "lint": "pnpm -r lint"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "tsx": "^4.16.2"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
