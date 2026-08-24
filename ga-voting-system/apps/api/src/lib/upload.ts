@@ -1,5 +1,5 @@
 import multer from "multer";
-import { fileTypeFromBuffer } from "file-type";
+import { fromBuffer as fileTypeFromBuffer } from "file-type";
 import sharp from "sharp";
 import { FILE_UPLOAD_LIMITS } from "@ga/shared";
 import { ApiError } from "../utils/apiError";
