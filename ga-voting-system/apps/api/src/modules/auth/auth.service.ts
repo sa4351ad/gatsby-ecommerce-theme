@@ -32,6 +32,7 @@ async function logAttempt(identifier: string, success: boolean, ip?: string, ua?
 /** الخطوة 1 من رحلة العضو: طلب OTP. رسالة الاستجابة عامة دومًا لمنع اكتشاف وجود العضو (Enumeration) */
 export async function requestMemberOtp(identifier: string, ip?: string, ua?: string) {
   const member = await findMemberByIdentifier(identifier);
+  let debugCode: string | undefined;
 
   if (member && member.status === "ACTIVE") {
     const { code } = await issueOtp({
@@ -47,10 +48,15 @@ export async function requestMemberOtp(identifier: string, ip?: string, ua?: str
       relatedMemberId: member.id,
     });
     await recordAudit({ userId: member.userId, action: AUDIT_ACTIONS.OTP_REQUESTED, entity: "Member", entityId: member.id, req: undefined });
+    // فقط في بيئة الاختبار الآلي — يسمح باختبار رحلة OTP الكاملة دون قراءة السجلات. لا يُفعَّل أبدًا خارج NODE_ENV=test
+    if (process.env.NODE_ENV === "test") debugCode = code;
   }
   await logAttempt(identifier, false, ip, ua, "OTP_REQUESTED");
 
-  return { message: "إذا كانت البيانات صحيحة، سيصلك رمز التحقق عبر الرسائل القصيرة خلال لحظات" };
+  return {
+    message: "إذا كانت البيانات صحيحة، سيصلك رمز التحقق عبر الرسائل القصيرة خلال لحظات",
+    ...(debugCode ? { debugCode } : {}),
+  };
 }
 
 /** الخطوة 2: التحقق من OTP وإنشاء الجلسة */

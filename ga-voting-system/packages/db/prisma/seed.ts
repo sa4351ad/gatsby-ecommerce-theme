@@ -75,8 +75,10 @@ async function createAdminUser(email: string, password: string, roleId: string) 
 
 let memberSeq = 1;
 async function createMember(roleId: string, opts: { fullName: string; phone: string; nationalId: string; weight: number; email?: string }) {
-  const membershipNumberSystem = `M-${String(memberSeq).padStart(6, "0")}`;
+  const seq = memberSeq;
   memberSeq += 1;
+  const membershipNumberSystem = `M-${String(seq).padStart(6, "0")}`;
+  const membershipNumberReal = `REAL-${seq}`;
   const user = await prisma.user.upsert({
     where: { email: opts.email ?? `${opts.phone}@placeholder.local` },
     create: { email: opts.email ?? `${opts.phone}@placeholder.local`, roleId, isActive: true },
@@ -90,7 +92,7 @@ async function createMember(roleId: string, opts: { fullName: string; phone: str
       nationalId: opts.nationalId,
       phone: opts.phone,
       email: opts.email,
-      membershipNumberReal: `REAL-${memberSeq}`,
+      membershipNumberReal,
       membershipNumberSystem,
       votingWeight: opts.weight,
       status: "ACTIVE",
