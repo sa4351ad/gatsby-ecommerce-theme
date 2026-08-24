@@ -442,13 +442,16 @@ model VoteParticipation {
   @@index([votingId])
 }
 
-/// سجل الإجابة الفعلي. عند التصويت السري: memberId = null ويُعتمد فقط anonymousToken
+/// سجل الإجابة الفعلي — غير قابل للتعديل أو الحذف بعد إنشائه (Append-only، Section 38).
+/// عند isSecret=true: memberId = null (لا رابط مباشر بالعضو). voterToken يُستخدم داخليًا
+/// فقط لإيجاد "الجولة السابقة" عند السماح بتغيير التصويت (allowVoteChange) دون كشف الهوية
+/// لأي طرف خارج الخادم نفسه (HMAC أحادي الاتجاه بسرّ الخادم — راجع lib/voteIntegrity.ts).
 model Vote {
-  id               String  @id @default(cuid())
-  votingId         String
-  questionId       String
-  memberId         String? // null عند isSecret = true
-  anonymousToken   String? @default(uuid())
+  id             String  @id @default(cuid())
+  votingId       String
+  questionId     String
+  memberId       String? // null عند isSecret = true (تصويت علني/Recorded فقط يحمل القيمة)
+  voterToken     String // HMAC(votingId+memberId) — لإيجاد/استبدال الجولة السابقة عند تغيير الصوت
   castByProxyOfMemberId String? // نقطة توسّع مستقبلية: التصويت بالوكالة (غير مُفعّل حاليًا)
 
   selectedOptionIds Json // string[] — لأنواع الاختيار
@@ -456,6 +459,12 @@ model Vote {
   ratingValue       Int? // تقييم 1-5 / 1-10
   percentageValue   Decimal? @db.Decimal(5, 2)
   textValue         String?
+  // وزن العضو لحظة التصويت (منسوخ من VotingEligibility) — يسمح باحتساب النتائج
+  // الموزونة بدقة حتى في التصويت السري حيث لا يوجد ربط مباشر بـ memberId
+  weightAtVote      Decimal  @db.Decimal(12, 4)
+
+  // عند تفعيل allowVoteChange: الجولة السابقة تُعلَّم هنا (لا تُحذف ولا تُعدَّل) وتُستبعد من الاحتساب
+  supersededAt DateTime?
 
   voting   Voting          @relation(fields: [votingId], references: [id], onDelete: Cascade)
   question VotingQuestion  @relation(fields: [questionId], references: [id], onDelete: Cascade)
@@ -463,12 +472,12 @@ model Vote {
 
   createdAt DateTime @default(now())
 
-  // دفاع إضافي (Defense-in-depth) بجانب VoteParticipation؛ NULL في memberId يُعامل كقيم متمايزة في PostgreSQL
-  @@unique([votingId, questionId, memberId])
-  @@index([votingId, questionId])
+  @@index([votingId, questionId, supersededAt])
+  @@index([voterToken])
 }
 
-/// الاعتماد الرسمي النهائي للتصويت (Section 20) — سجل غير قابل للتعديل
+/// الاعتماد الرسمي النهائي للتصويت (Section 20) — سجل غير قابل للتعديل.
+/// عند السماح بتغيير التصويت، الاعتماد الجديد "يستبدل" (supersededAt) السابق دون حذفه.
 model VoteConfirmation {
   id              String   @id @default(cuid())
   votingId        String
@@ -480,12 +489,12 @@ model VoteConfirmation {
   ipAddress       String?
   userAgent       String?
   otpVerified     Boolean  @default(false)
+  supersededAt    DateTime?
   createdAt       DateTime @default(now())
 
   signature VoteSignature?
 
-  @@unique([votingId, memberId])
-  @@index([votingId])
+  @@index([votingId, memberId, supersededAt])
 }
 
 /// بصمة تكامل (Hash) للتحقق لاحقًا من عدم العبث بالبيانات

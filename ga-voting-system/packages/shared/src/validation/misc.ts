@@ -10,19 +10,19 @@ export const addGroupMembersSchema = z.object({
   memberIds: z.array(z.string()).min(1),
 });
 
-export const createMeetingSchema = z
-  .object({
-    title: z.string().min(2),
-    description: z.string().optional(),
-    date: z.string().datetime(),
-    startTime: z.string().datetime(),
-    endTime: z.string().datetime(),
-    location: z.string().optional(),
-    mode: z.enum(["IN_PERSON", "ONLINE", "HYBRID"]).default("IN_PERSON"),
-    inviteeMemberIds: z.array(z.string()).optional(),
-    inviteAllMembers: z.boolean().default(false),
-  })
-  .superRefine((m, ctx) => {
+export const createMeetingObjectSchema = z.object({
+  title: z.string().min(2),
+  description: z.string().optional(),
+  date: z.string().datetime(),
+  startTime: z.string().datetime(),
+  endTime: z.string().datetime(),
+  location: z.string().optional(),
+  mode: z.enum(["IN_PERSON", "ONLINE", "HYBRID"]).default("IN_PERSON"),
+  inviteeMemberIds: z.array(z.string()).optional(),
+  inviteAllMembers: z.boolean().default(false),
+});
+
+export const createMeetingSchema = createMeetingObjectSchema.superRefine((m, ctx) => {
     if (new Date(m.endTime) <= new Date(m.startTime)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,

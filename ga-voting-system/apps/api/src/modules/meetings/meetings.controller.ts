@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { createMeetingSchema } from "@ga/shared";
+import { createMeetingSchema, createMeetingObjectSchema } from "@ga/shared";
 import * as service from "./meetings.service";
 import { asyncHandler } from "../../utils/asyncHandler";
 
@@ -17,6 +17,6 @@ export const create = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const update = asyncHandler(async (req: Request, res: Response) => {
-  const input = createMeetingSchema.partial().parse(req.body);
+  const input = createMeetingObjectSchema.partial().parse(req.body);
   res.json(await service.updateMeeting(req.params.id, input, req.auth?.userId));
 });

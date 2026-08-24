@@ -65,31 +65,31 @@ export const votingQuestionSchema = z
     }
   });
 
-export const createVotingSchema = z
-  .object({
-    title: z.string().min(3, "عنوان التصويت مطلوب"),
-    description: z.string().optional(),
-    legalText: z.string().optional(),
-    meetingId: z.string().optional().nullable(),
-    kind: z.enum(["STANDARD", "ELECTION"]).default("STANDARD"),
-    startAt: z.string().datetime(),
-    endAt: z.string().datetime(),
-    timezone: z.string().default("Asia/Riyadh"),
-    isSecret: z.boolean().default(false),
-    allowVoteChange: z.boolean().default(false),
-    requiresFinalApproval: z.boolean().default(false),
-    isWeighted: z.boolean().default(true),
-    resultsVisibleToMembers: z.boolean().default(true),
-    quorumType: z
-      .enum(["NONE", "PERCENTAGE_OF_MEMBERS", "FIXED_COUNT", "PERCENTAGE_OF_WEIGHT"])
-      .default("NONE"),
-    quorumValue: z.number().nonnegative().optional(),
-    targetType: z.enum(["ALL", "GROUP", "SELECTED", "CONDITIONAL"]).default("ALL"),
-    targetGroupId: z.string().optional().nullable(),
-    targetMemberIds: z.array(z.string()).optional(),
-    questions: z.array(votingQuestionSchema).min(1, "يجب إضافة سؤال واحد على الأقل"),
-  })
-  .superRefine((v, ctx) => {
+export const createVotingObjectSchema = z.object({
+  title: z.string().min(3, "عنوان التصويت مطلوب"),
+  description: z.string().optional(),
+  legalText: z.string().optional(),
+  meetingId: z.string().optional().nullable(),
+  kind: z.enum(["STANDARD", "ELECTION"]).default("STANDARD"),
+  startAt: z.string().datetime(),
+  endAt: z.string().datetime(),
+  timezone: z.string().default("Asia/Riyadh"),
+  isSecret: z.boolean().default(false),
+  allowVoteChange: z.boolean().default(false),
+  requiresFinalApproval: z.boolean().default(false),
+  isWeighted: z.boolean().default(true),
+  resultsVisibleToMembers: z.boolean().default(true),
+  quorumType: z
+    .enum(["NONE", "PERCENTAGE_OF_MEMBERS", "FIXED_COUNT", "PERCENTAGE_OF_WEIGHT"])
+    .default("NONE"),
+  quorumValue: z.number().nonnegative().optional(),
+  targetType: z.enum(["ALL", "GROUP", "SELECTED", "CONDITIONAL"]).default("ALL"),
+  targetGroupId: z.string().optional().nullable(),
+  targetMemberIds: z.array(z.string()).optional(),
+  questions: z.array(votingQuestionSchema).min(1, "يجب إضافة سؤال واحد على الأقل"),
+});
+
+export const createVotingSchema = createVotingObjectSchema.superRefine((v, ctx) => {
     if (new Date(v.endAt) <= new Date(v.startAt)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
