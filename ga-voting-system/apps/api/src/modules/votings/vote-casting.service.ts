@@ -171,7 +171,14 @@ export async function confirmAndCastVote(ctx: CastContext) {
     const hash = computeVoteHash({
       memberId: ctx.memberId,
       votingId: ctx.votingId,
-      answers: ctx.answers.map((a) => ({ questionId: a.questionId, selectedOptionIds: a.selectedOptionIds ?? [] })),
+      answers: ctx.answers.map((a) => ({
+        questionId: a.questionId,
+        selectedOptionIds: a.selectedOptionIds ?? [],
+        rankingOptionIds: a.rankingOptionIds,
+        ratingValue: a.ratingValue,
+        percentageValue: a.percentageValue,
+        textValue: a.textValue,
+      })),
       confirmedAt,
     });
 

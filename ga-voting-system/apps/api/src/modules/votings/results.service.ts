@@ -76,9 +76,10 @@ export async function computeResults(votingId: string) {
 
   const questionResults = [];
   for (const question of voting.questions) {
-    // ملاحظة: سجلات Vote تُنشأ حصريًا داخل نفس معاملة الاعتماد (VoteConfirmation) —
-    // لا يوجد أبدًا صوت "غير معتمد" مخزَّن، لذلك لا حاجة لفلترة إضافية هنا (راجع vote-casting.service.ts)
-    const votes = await prisma.vote.findMany({ where: { votingId, questionId: question.id } });
+    // ملاحظة: سجلات Vote تُنشأ حصريًا داخل نفس معاملة الاعتماد (VoteConfirmation) — لا يوجد
+    // أبدًا صوت "غير معتمد" مخزَّن. لكن عند allowVoteChange=true تبقى الجولة السابقة محفوظة
+    // (Append-only) ومُعلَّمة supersededAt — يجب استبعادها من الاحتساب أو تتضاعف الأصوات.
+    const votes = await prisma.vote.findMany({ where: { votingId, questionId: question.id, supersededAt: null } });
 
     const rows: VoteRowForTally[] = votes.map((v) => ({
       selectedOptionIds: (v.selectedOptionIds as string[]) ?? [],

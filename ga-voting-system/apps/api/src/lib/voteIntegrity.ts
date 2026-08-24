@@ -5,16 +5,36 @@ import { VOTE_REFERENCE_PREFIX } from "@ga/shared";
 
 type TxClient = Prisma.TransactionClient;
 
-/** Hash تكامل التصويت — SHA-256(memberId + votingId + الإجابات مرتّبة + timestamp + سرّ خادم) */
+interface HashableAnswer {
+  questionId: string;
+  selectedOptionIds: string[];
+  rankingOptionIds?: string[];
+  ratingValue?: number;
+  percentageValue?: number;
+  textValue?: string;
+}
+
+/**
+ * Hash تكامل التصويت — HMAC-SHA256 يغطي كل حقول الإجابة الممكنة لكل أنواع الأسئلة
+ * (اختيار، ترتيب، تقييم، نسبة، نص)، وليس selectedOptionIds فقط — وإلا يبقى التوقيع
+ * صحيحًا رياضيًا حتى بعد تعديل قيمة تقييم/ترتيب/نسبة محفوظة، مما يُبطل الغرض من التكامل.
+ */
 export function computeVoteHash(params: {
   memberId: string;
   votingId: string;
-  answers: Array<{ questionId: string; selectedOptionIds: string[] }>;
+  answers: HashableAnswer[];
   confirmedAt: Date;
 }): string {
   const sortedAnswers = [...params.answers]
     .sort((a, b) => a.questionId.localeCompare(b.questionId))
-    .map((a) => ({ questionId: a.questionId, selectedOptionIds: [...a.selectedOptionIds].sort() }));
+    .map((a) => ({
+      questionId: a.questionId,
+      selectedOptionIds: [...a.selectedOptionIds].sort(),
+      rankingOptionIds: a.rankingOptionIds ?? null,
+      ratingValue: a.ratingValue ?? null,
+      percentageValue: a.percentageValue ?? null,
+      textValue: a.textValue ?? null,
+    }));
 
   const payload = JSON.stringify({
     memberId: params.memberId,
@@ -35,17 +55,14 @@ export function computeVoterToken(votingId: string, memberId: string): string {
   return crypto.createHmac("sha256", env.VOTE_HASH_SECRET).update(`${votingId}:${memberId}`).digest("hex");
 }
 
-/** توليد رقم مرجعي فريد: VOTE-2026-000001 (تسلسلي ضمن السنة الحالية، ضمن نفس المعاملة لتفادي التعارض) */
+/**
+ * توليد رقم مرجعي فريد: VOTE-2026-000001. يعتمد على PostgreSQL SEQUENCE (nextval) بدل
+ * "عدّ ثم تحقق" — العدّ وحده عرضة لتعارض بين معاملتين متزامنتين تريان نفس العدد وتحاولان
+ * إنشاء نفس الرقم المرجعي، فتفشل إحداهما بصوت مُعتمَد بالكامل خلا هذه الخطوة الأخيرة فقط.
+ * الـ Sequence ذرّي على مستوى قاعدة البيانات ولا يتعارض أبدًا مهما بلغ التزامن.
+ */
 export async function generateVoteReferenceNumber(tx: TxClient): Promise<string> {
   const year = new Date().getFullYear();
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const countThisYear = await tx.voteConfirmation.count({
-      where: { referenceNumber: { startsWith: `${VOTE_REFERENCE_PREFIX}-${year}-` } },
-    });
-    const seq = (countThisYear + 1 + attempt).toString().padStart(6, "0");
-    const candidate = `${VOTE_REFERENCE_PREFIX}-${year}-${seq}`;
-    const exists = await tx.voteConfirmation.findUnique({ where: { referenceNumber: candidate } });
-    if (!exists) return candidate;
-  }
-  throw new Error("تعذّر توليد رقم مرجعي فريد للتصويت");
+  const [{ seq }] = await tx.$queryRaw<Array<{ seq: bigint }>>`SELECT nextval('vote_reference_seq') AS seq`;
+  return `${VOTE_REFERENCE_PREFIX}-${year}-${seq.toString().padStart(6, "0")}`;
 }

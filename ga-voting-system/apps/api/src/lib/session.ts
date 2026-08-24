@@ -3,13 +3,17 @@ import { prisma } from "@ga/db";
 import { signAccessToken, signRefreshToken } from "./jwt";
 import { randomToken, sha256Hex } from "./crypto";
 import { SESSION_DEFAULTS } from "@ga/shared";
-import { isProd } from "../env";
+import { isProd, env } from "../env";
 
+// عند نشر الواجهة والـ API على نطاقات فرعية مختلفة (مثال: app.example.com وapi.example.com)،
+// يجب أن تُضبط الكوكيز على النطاق الأب المشترك (COOKIE_DOMAIN=.example.com) وإلا لا يستطيع
+// جافاسكربت في واجهة الويب قراءة ga_csrf (Same-Origin)، فتُرفض كل الطلبات المُغيِّرة بـ 403.
 const cookieBase = {
   httpOnly: true,
   secure: isProd,
   sameSite: "lax" as const,
   path: "/",
+  ...(env.COOKIE_DOMAIN ? { domain: env.COOKIE_DOMAIN } : {}),
 };
 
 interface CreateSessionParams {

@@ -14,6 +14,12 @@ export const list = asyncHandler(async (req: Request, res: Response) => {
 
 export const get = asyncHandler(async (req: Request, res: Response) => {
   await lifecycle.ensureLifecycleFresh(req.params.id);
+  // الأعضاء (VOTINGS_VIEW_ASSIGNED) يحصلون على عرض مُصفَّى: بلا بيانات أعضاء آخرين، وبعد
+  // التحقق أنهم مستهدَفون/مؤهَّلون فعليًا لهذا التصويت تحديدًا — لا يكفي أن الدور "عضو".
+  if (req.auth?.roleKey === ROLE_KEYS.MEMBER) {
+    if (!req.auth.memberId) throw new ApiError(403, "غير مصرح");
+    return res.json(await votingsService.getVotingForMember(req.params.id, req.auth.memberId));
+  }
   res.json(await votingsService.getVoting(req.params.id));
 });
 

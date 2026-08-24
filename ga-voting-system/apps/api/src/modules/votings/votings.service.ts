@@ -2,6 +2,7 @@ import { prisma } from "@ga/db";
 import type { CreateVotingInput } from "@ga/shared";
 import { ApiError } from "../../utils/apiError";
 import { recordAudit, AUDIT_ACTIONS } from "../../lib/audit";
+import { resolveTargetMembers } from "./lifecycle.service";
 
 const DEFAULT_OPTIONS: Record<string, string[]> = {
   DECISION_APPROVAL: ["موافق", "غير موافق", "ممتنع"],
@@ -19,6 +20,7 @@ export async function listVotings(filters: { status?: string; meetingId?: string
   });
 }
 
+/** عرض إداري كامل — يتضمن قوائم الاستهداف (Section 3: مخصَّص للأدوار الإدارية فقط) */
 export async function getVoting(id: string) {
   const voting = await prisma.voting.findUnique({
     where: { id },
@@ -31,6 +33,42 @@ export async function getVoting(id: string) {
   });
   if (!voting) throw new ApiError(404, "التصويت غير موجود");
   return voting;
+}
+
+/**
+ * عرض مخصّص للعضو نفسه — لا يتضمن أبدًا سجلات أعضاء آخرين (كانت تُسرَّب عبر targetMembers:
+ * الاسم/الهوية/الجوال/البريد/الملاحظات الإدارية لكل عضو مستهدف). كما يتحقق أن العضو
+ * مستهدَف/مؤهَّل فعليًا لهذا التصويت قبل إعادة أي تفاصيل — بدل الاعتماد فقط على أن الدور
+ * يملك صلاحية "votings.view.assigned" (تلك الصلاحية تعني "يمكنه رؤية تصويتاته هو"، وليست
+ * تصريحًا لرؤية أي تصويت في النظام).
+ */
+export async function getVotingForMember(id: string, memberId: string) {
+  const voting = await prisma.voting.findUnique({
+    where: { id },
+    include: {
+      questions: { include: { options: { include: { candidate: true } } }, orderBy: { order: "asc" } },
+      meeting: true,
+    },
+  });
+  if (!voting) throw new ApiError(404, "التصويت غير موجود");
+  if (voting.status === "DRAFT") throw new ApiError(404, "التصويت غير موجود");
+
+  const authorized = await isMemberAuthorizedForVoting(voting.id, voting.status, memberId);
+  if (!authorized) throw new ApiError(403, "غير مصرح لك بالوصول إلى هذا التصويت");
+
+  return voting;
+}
+
+async function isMemberAuthorizedForVoting(votingId: string, status: string, memberId: string): Promise<boolean> {
+  const eligibility = await prisma.votingEligibility.findUnique({
+    where: { votingId_memberId: { votingId, memberId } },
+  });
+  if (eligibility) return eligibility.isEligible;
+  if (status !== "SCHEDULED" && status !== "CANCELLED") return false; // لا Snapshot ولا حالة تسمح بتحقق حي
+
+  // لم يُفتح التصويت بعد — لا يوجد Snapshot أهلية، تحقّق حيّ من الاستهداف (معاينة فقط، غير نهائي)
+  const targets = await resolveTargetMembers(votingId);
+  return targets.some((t) => t.id === memberId);
 }
 
 export async function createVoting(input: CreateVotingInput, userId?: string) {

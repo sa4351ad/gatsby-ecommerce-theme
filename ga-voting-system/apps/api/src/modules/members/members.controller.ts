@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { createMemberSchema, updateMemberSchema } from "@ga/shared";
+import { createMemberSchema, updateMemberSchema, PERMISSIONS } from "@ga/shared";
 import * as service from "./members.service";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { assertRealFileType, optimizeAvatarImage } from "../../lib/upload";
@@ -48,6 +48,12 @@ export const disable = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const uploadAvatar = asyncHandler(async (req: Request, res: Response) => {
+  // SELF_UPDATE_LIMITED يمنح كل عضو حق تعديل صورته هو فقط — بدون هذا التحقق يستطيع أي
+  // عضو استبدال صورة أي عضو آخر لمجرد معرفة رقم عضويته (IDOR عبر :id في المسار).
+  const isFullAdmin = req.auth?.permissions.has(PERMISSIONS.MEMBERS_UPDATE);
+  if (!isFullAdmin && req.auth?.memberId !== req.params.id) {
+    throw new ApiError(403, "لا يمكنك تعديل صورة عضو آخر");
+  }
   const file = (req as any).file as Express.Multer.File | undefined;
   if (!file) throw new ApiError(400, "لم يتم إرفاق أي صورة");
   await assertRealFileType(file.buffer, FILE_UPLOAD_LIMITS.ALLOWED_IMAGE_MIME);

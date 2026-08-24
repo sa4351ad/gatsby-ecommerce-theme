@@ -65,6 +65,24 @@ describe("منع التصويت المكرر (Section 18)", () => {
     expect(votesForMember.some((v) => v.supersededAt === null)).toBe(true);
   });
 
+  it("يوزّع أرقامًا مرجعية فريدة دون تعارض عند اعتماد عدة أعضاء تصويتهم في نفس اللحظة (Regression)", async () => {
+    // كان توليد الرقم المرجعي يعتمد على عدّ السجلات ثم التحقق (عرضة للتزامن)؛ عضوان مختلفان
+    // قد يريان نفس العدد ويحاولان إنشاء نفس الرقم، فيفشل أحدهما بخطأ 500 عام رغم أن تصويته صحيح.
+    const members = await Promise.all(Array.from({ length: 5 }, () => createTestMember()));
+    const voting = await createTestVoting(members, { allowVoteChange: false });
+    const q = voting.questions[0];
+    const opt = q.options[0];
+
+    const auths = await Promise.all(members.map((m) => loginAsMember(app, m.nationalId)));
+    const results = await Promise.all(
+      auths.map((auth) => castOnce(auth.cookieHeader, auth.csrfToken, voting.id, q.id, opt.id)),
+    );
+
+    for (const r of results) expect(r.status).toBe(200);
+    const referenceNumbers = results.map((r) => r.body.referenceNumber);
+    expect(new Set(referenceNumbers).size).toBe(members.length); // كلها فريدة
+  });
+
   it("يرفض التصويت لعضو غير مؤهل (لا يملك Snapshot أهلية لهذا التصويت)", async () => {
     const eligibleMember = await createTestMember();
     const outsiderMember = await createTestMember();
