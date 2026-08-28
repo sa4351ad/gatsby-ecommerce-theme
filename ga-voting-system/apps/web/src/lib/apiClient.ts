@@ -1,4 +1,10 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+// فارغ افتراضيًا: تُرسَل الطلبات إلى نفس نطاق الواجهة (/api/v1/...) ويمرّرها خادم Next.js
+// داخليًا إلى الـ API الفعلي عبر rewrites في next.config.js (راجع API_PROXY_TARGET هناك) —
+// هذا يُبقي كوكيز الجلسة كوكيز من الطرف الأول دائمًا من منظور المتصفح. اضبط
+// NEXT_PUBLIC_API_URL فقط إذا كنت تريد استدعاء الـ API مباشرة من المتصفح (لا يُنصح به
+// عند نشر الواجهة والـ API على نطاقين منفصلين، بسبب حجب كوكيز الطرف الثالث في المتصفحات
+// الحديثة حتى مع SameSite=None).
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 
 export class ApiClientError extends Error {
   status: number;
@@ -62,7 +68,7 @@ interface RequestOptions {
 /** عميل API موحّد — يرسل الكوكيز تلقائيًا ويضيف رمز CSRF لأي طلب يغيّر البيانات */
 export async function apiFetch<T = any>(path: string, options: RequestOptions = {}): Promise<T> {
   const method = options.method ?? "GET";
-  const url = new URL(`${API_BASE}${path}`);
+  const url = new URL(`${API_BASE}${path}`, typeof window !== "undefined" ? window.location.origin : undefined);
   if (options.query) {
     for (const [k, v] of Object.entries(options.query)) {
       if (v !== undefined) url.searchParams.set(k, String(v));
@@ -109,7 +115,7 @@ export async function apiFetch<T = any>(path: string, options: RequestOptions = 
 }
 
 export function apiDownloadUrl(path: string, query?: Record<string, string>) {
-  const url = new URL(`${API_BASE}${path}`);
+  const url = new URL(`${API_BASE}${path}`, typeof window !== "undefined" ? window.location.origin : undefined);
   if (query) for (const [k, v] of Object.entries(query)) url.searchParams.set(k, v);
   return url.toString();
 }

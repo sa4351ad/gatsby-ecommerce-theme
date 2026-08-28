@@ -39,12 +39,12 @@ pnpm install
 انسخ `.env.example` وأنشئ:
 - `apps/api/.env` (يحتاج `DATABASE_URL`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `VOTE_HASH_SECRET`, `SETTINGS_ENCRYPTION_KEY`, `WEB_APP_URL`, ...)
 - `packages/db/.env` (يحتاج `DATABASE_URL` فقط — يُستخدم من أوامر Prisma CLI مباشرة)
-- `apps/web/.env.local` (يحتاج `NEXT_PUBLIC_API_URL`)
+- `apps/web/.env.local` (يحتاج `API_PROXY_TARGET` — خادم Next.js نفسه يمرّر طلبات `/api/*` إليه، فتبقى كوكيز الجلسة من الطرف الأول دائمًا من منظور المتصفح؛ راجع `next.config.js`)
 
 ```bash
 cp .env.example apps/api/.env
 cp .env.example packages/db/.env
-echo "NEXT_PUBLIC_API_URL=http://localhost:4000" > apps/web/.env.local
+echo "API_PROXY_TARGET=http://localhost:4000" > apps/web/.env.local
 ```
 
 **لا تستخدم القيم الافتراضية في `.env.example` في بيئة إنتاجية.** ولّد أسرارًا عشوائية:
@@ -156,7 +156,7 @@ docker compose exec api pnpm --filter @ga/db exec prisma migrate deploy
 docker compose exec api pnpm --filter @ga/db exec tsx prisma/seed.ts   # اختياري لأول تشغيل فقط
 ```
 
-يشغّل هذا: PostgreSQL (منفذ 5432)، API (منفذ 4000)، Web (منفذ 3000). ضع خلفهما Nginx/Caddy لإصدار شهادة HTTPS وربط الدومين، وحدّث `WEB_APP_URL` و`NEXT_PUBLIC_API_URL` في `.env` ليطابقا نطاقك الفعلي.
+يشغّل هذا: PostgreSQL (منفذ 5432)، API (منفذ 4000)، Web (منفذ 3000). ضع خلفهما Nginx/Caddy لإصدار شهادة HTTPS وربط الدومين، وحدّث `WEB_APP_URL` في `.env` ليطابق نطاقك الفعلي. لا حاجة لضبط `NEXT_PUBLIC_API_URL` — خادم Next.js يمرّر طلبات `/api/*` داخليًا إلى حاوية الـ API (`API_PROXY_TARGET=http://api:4000`، مضبوطة مسبقًا في `docker-compose.yml`)، حتى لو وضعت الواجهة والـ API خلف نطاقين فرعيين منفصلين.
 
 ### نشر يدوي على VPS
 

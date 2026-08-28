@@ -44,11 +44,14 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
-      args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
     restart: unless-stopped
     depends_on:
       - api
+    environment:
+      # يمرّر خادم Next.js نفسه طلبات /api/* إلى حاوية الـ API عبر شبكة Docker الداخلية —
+      # يُبقي هذا كوكيز الجلسة كوكيز من الطرف الأول من منظور المتصفح دومًا، حتى عند وضع
+      # الواجهة والـ API خلف نطاقين فرعيين منفصلين وراء Nginx/Caddy (راجع next.config.js).
+      API_PROXY_TARGET: http://api:4000
     ports:
       - "3000:3000"
 
