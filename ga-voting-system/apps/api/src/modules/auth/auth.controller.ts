@@ -32,8 +32,8 @@ export const adminLogin = asyncHandler(async (req: Request, res: Response) => {
 export const refresh = asyncHandler(async (req: Request, res: Response) => {
   const token = req.cookies?.ga_refresh;
   if (!token) throw new ApiError(401, "الرجاء تسجيل الدخول");
-  await authService.refreshSession(token, res, req.ip, req.headers["user-agent"] as string);
-  res.json({ message: "تم تجديد الجلسة" });
+  const { csrfToken } = await authService.refreshSession(token, res, req.ip, req.headers["user-agent"] as string);
+  res.json({ message: "تم تجديد الجلسة", csrfToken });
 });
 
 export const logout = asyncHandler(async (req: Request, res: Response) => {

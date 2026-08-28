@@ -5,13 +5,19 @@ import { randomToken, sha256Hex } from "./crypto";
 import { SESSION_DEFAULTS } from "@ga/shared";
 import { isProd, env } from "../env";
 
-// عند نشر الواجهة والـ API على نطاقات فرعية مختلفة (مثال: app.example.com وapi.example.com)،
-// يجب أن تُضبط الكوكيز على النطاق الأب المشترك (COOKIE_DOMAIN=.example.com) وإلا لا يستطيع
-// جافاسكربت في واجهة الويب قراءة ga_csrf (Same-Origin)، فتُرفض كل الطلبات المُغيِّرة بـ 403.
+// عند نشر الواجهة والـ API على نطاقات فرعية مختلفة تشترك في نطاق أب واحد (مثال:
+// app.example.com وapi.example.com)، اضبط COOKIE_DOMAIN=.example.com مع الإبقاء على
+// SameSite=Lax الافتراضي. أما عند نشرهما على نطاقين مستقلّين تمامًا لا يشتركان في نطاق أب
+// (كما هو الحال مع خدمتي Render المنفصلتين *.onrender.com في بيئة التجربة الحالية)، فإن
+// SameSite=Lax يمنع المتصفح من إرسال الكوكيز في طلبات fetch/XHR العابرة للمواقع (يُرسَل فقط
+// في التنقّل المباشر GET)، فتبدو عملية الدخول ناجحة (تُضبط الكوكيز في استجابة الدخول) لكن أول
+// طلب لاحق (auth/me) يصل بلا كوكيز فيُعاد المستخدم لصفحة الدخول. الحل: اضبط
+// COOKIE_SAMESITE=none (يتطلب Secure=true، مضمون هنا لأن isProd يفرضه تلقائيًا).
+const sameSite = env.COOKIE_SAMESITE;
 const cookieBase = {
   httpOnly: true,
-  secure: isProd,
-  sameSite: "lax" as const,
+  secure: isProd || sameSite === "none",
+  sameSite,
   path: "/",
   ...(env.COOKIE_DOMAIN ? { domain: env.COOKIE_DOMAIN } : {}),
 };
@@ -24,7 +30,15 @@ interface CreateSessionParams {
   ipAddress?: string;
 }
 
-/** ينشئ جلسة جديدة (Access + Refresh + CSRF) ويضبط الكوكيز في الاستجابة */
+/**
+ * ينشئ جلسة جديدة (Access + Refresh + CSRF) ويضبط الكوكيز في الاستجابة.
+ * يُعاد csrfToken أيضًا في القيمة المرجعة (وليس فقط كـ Cookie) لأن جافاسكربت في واجهة
+ * الويب لا يستطيع قراءة document.cookie لكوكيز صادرة عن نطاق مختلف تمامًا (لا نطاق أب
+ * مشترك) — تحديدًا حالة نشر الواجهة والـ API على نطاقين onrender.com منفصلين. المتصفح
+ * يرسل الكوكيز نفسها للخادم بشكل صحيح (وهذا ما يتحقق منه csrfProtection من جهة الخادم)،
+ * لكن قراءتها من JS العميل تفشل بصمت. لذا تُخزَّن الواجهة القيمة المُعادة هنا وتستخدمها
+ * كبديل عند تعذّر قراءة الكوكي (راجع apps/web/src/lib/apiClient.ts).
+ */
 export async function establishSession(res: Response, params: CreateSessionParams) {
   const session = await prisma.session.create({
     data: {
@@ -61,7 +75,7 @@ export async function establishSession(res: Response, params: CreateSessionParam
     maxAge: SESSION_DEFAULTS.REFRESH_TOKEN_TTL_DAYS * 86400 * 1000,
   });
 
-  return { sessionId: session.id };
+  return { sessionId: session.id, csrfToken };
 }
 
 export function clearSessionCookies(res: Response) {

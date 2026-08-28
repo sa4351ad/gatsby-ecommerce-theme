@@ -84,7 +84,7 @@ export async function verifyMemberOtp(
   await prisma.user.update({ where: { id: member.userId }, data: { lastLoginAt: new Date(), lastLoginIp: ip } });
   await prisma.member.update({ where: { id: member.id }, data: { lastLoginAt: new Date() } });
 
-  await establishSession(res, {
+  const { csrfToken } = await establishSession(res, {
     userId: member.userId,
     roleKey: "MEMBER",
     memberId: member.id,
@@ -101,6 +101,7 @@ export async function verifyMemberOtp(
       fullName: member.fullName,
       membershipNumberSystem: member.membershipNumberSystem,
     },
+    csrfToken,
   };
 }
 
@@ -125,11 +126,11 @@ export async function adminLogin(email: string, password: string, res: Response,
   }
 
   await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date(), lastLoginIp: ip } });
-  await establishSession(res, { userId: user.id, roleKey: user.role.key, userAgent: ua, ipAddress: ip });
+  const { csrfToken } = await establishSession(res, { userId: user.id, roleKey: user.role.key, userAgent: ua, ipAddress: ip });
   await logAttempt(email, true, ip, ua, "PASSWORD_LOGIN");
   await recordAudit({ userId: user.id, action: AUDIT_ACTIONS.LOGIN_SUCCESS, entity: "User", entityId: user.id });
 
-  return { user: { id: user.id, email: user.email, role: user.role.key } };
+  return { user: { id: user.id, email: user.email, role: user.role.key }, csrfToken };
 }
 
 export async function refreshSession(refreshToken: string, res: Response, ip?: string, ua?: string) {
@@ -148,13 +149,15 @@ export async function refreshSession(refreshToken: string, res: Response, ip?: s
   // تدوير Refresh Token: إبطال القديم فورًا لمنع إعادة الاستخدام
   await prisma.session.update({ where: { id: session.id }, data: { revokedAt: new Date() } });
 
-  await establishSession(res, {
+  const { csrfToken } = await establishSession(res, {
     userId: session.userId,
     roleKey: session.user.role.key,
     memberId: session.user.member?.id,
     userAgent: ua,
     ipAddress: ip,
   });
+
+  return { csrfToken };
 }
 
 export async function logout(userId: string | undefined, refreshToken: string | undefined, res: Response) {

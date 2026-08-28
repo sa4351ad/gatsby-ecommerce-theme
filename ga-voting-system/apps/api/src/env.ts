@@ -13,6 +13,7 @@ const envSchema = z.object({
     .min(32, "SETTINGS_ENCRYPTION_KEY يجب أن يكون 32 حرفًا على الأقل (256-bit)"),
   WEB_APP_URL: z.string().default("http://localhost:3000"),
   COOKIE_DOMAIN: z.string().optional(),
+  COOKIE_SAMESITE: z.enum(["lax", "strict", "none"]).default("lax"),
   UPLOAD_DIR: z.string().default("./uploads"),
   DEFAULT_TIMEZONE: z.string().default("Asia/Riyadh"),
 });

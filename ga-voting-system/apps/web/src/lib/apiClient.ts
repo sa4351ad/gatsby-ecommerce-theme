@@ -16,6 +16,42 @@ function readCookie(name: string): string | undefined {
   return match ? decodeURIComponent(match[1]) : undefined;
 }
 
+// عندما تُنشَر الواجهة والـ API على نطاقين منفصلين تمامًا (لا نطاق أب مشترك، كحال
+// خدمتي *.onrender.com في بيئة التجربة)، لا يستطيع JS في هذه الصفحة قراءة كوكي ga_csrf
+// لأنه صادر عن نطاق الـ API وليس نطاق الواجهة — حتى مع httpOnly=false. لذا يُعاد رمز
+// CSRF أيضًا في نص استجابة تسجيل الدخول/التجديد (راجع session.ts)، وتُخزَّن القيمة هنا
+// كبديل يُستخدم فقط عند تعذّر قراءة الكوكي مباشرة (النشر على نفس النطاق يبقى يعمل كما هو).
+const CSRF_STORAGE_KEY = "ga_csrf_fallback";
+
+function readStoredCsrf(): string | undefined {
+  if (typeof window === "undefined") return undefined;
+  try {
+    return window.localStorage.getItem(CSRF_STORAGE_KEY) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function storeCsrfFromResponse(data: unknown) {
+  if (typeof window === "undefined") return;
+  if (data && typeof data === "object" && typeof (data as any).csrfToken === "string") {
+    try {
+      window.localStorage.setItem(CSRF_STORAGE_KEY, (data as any).csrfToken);
+    } catch {
+      // تجاهل (مثلاً وضع التصفح الخاص)
+    }
+  }
+}
+
+function clearStoredCsrf() {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(CSRF_STORAGE_KEY);
+  } catch {
+    // تجاهل
+  }
+}
+
 interface RequestOptions {
   method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
   body?: unknown;
@@ -35,7 +71,7 @@ export async function apiFetch<T = any>(path: string, options: RequestOptions = 
 
   const headers: Record<string, string> = {};
   if (method !== "GET") {
-    const csrf = readCookie("ga_csrf");
+    const csrf = readCookie("ga_csrf") ?? readStoredCsrf();
     if (csrf) headers["x-csrf-token"] = csrf;
   }
 
@@ -61,6 +97,12 @@ export async function apiFetch<T = any>(path: string, options: RequestOptions = 
   if (!res.ok) {
     const message = isJson && (data as any)?.message ? (data as any).message : "حدث خطأ غير متوقع";
     throw new ApiClientError(res.status, message, isJson ? (data as any)?.errors : undefined);
+  }
+
+  if (path === "/api/v1/auth/logout") {
+    clearStoredCsrf();
+  } else if (isJson) {
+    storeCsrfFromResponse(data);
   }
 
   return data as T;

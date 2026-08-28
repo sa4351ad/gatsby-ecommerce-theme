@@ -12,4 +12,5 @@ out/
 coverage/
 .turbo/
 uploads/
+*.tsbuildinfo
 packages/db/prisma/dev.db
