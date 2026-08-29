@@ -1,0 +1,663 @@
+// ============================================================================
+// Prisma Schema — نظام إدارة الجمعيات العمومية والتصويت الإلكتروني
+// راجع ARCHITECTURE.md (§8) لملخص الجداول والعلاقات.
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum MembershipStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  EXPIRED
+}
+
+enum VotingStatus {
+  DRAFT
+  SCHEDULED
+  OPEN
+  CLOSED
+  CANCELLED
+  ARCHIVED
+}
+
+enum VotingKind {
+  STANDARD
+  ELECTION
+}
+
+enum VotingTargetType {
+  ALL
+  GROUP
+  SELECTED
+  CONDITIONAL
+}
+
+enum QuorumType {
+  NONE
+  PERCENTAGE_OF_MEMBERS
+  FIXED_COUNT
+  PERCENTAGE_OF_WEIGHT
+}
+
+// قابلة للتوسع بدون تعديل بقية النظام (Strategy Pattern في apps/api)
+enum QuestionType {
+  DECISION_APPROVAL // موافق / غير موافق / ممتنع
+  YES_NO
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  ELECTION // اختيار مرشحين ضمن عدد مقاعد
+  RANKING
+  RATING_5
+  RATING_10
+  PERCENTAGE_VALUE
+}
+
+enum MeetingMode {
+  IN_PERSON
+  ONLINE
+  HYBRID
+}
+
+enum MeetingStatus {
+  SCHEDULED
+  ONGOING
+  COMPLETED
+  CANCELLED
+}
+
+enum NotificationType {
+  NEW_VOTING
+  VOTING_CLOSING_SOON
+  VOTING_CLOSED
+  VOTE_CONFIRMED
+  RESULTS_ANNOUNCED
+  GENERAL
+}
+
+enum MessageStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum OtpPurpose {
+  LOGIN
+  VOTE_CONFIRMATION
+  PHONE_CHANGE
+  ADMIN_LOGIN
+}
+
+enum OtpChannel {
+  SMS
+  EMAIL
+}
+
+enum ImportJobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  COMPLETED_WITH_ERRORS
+  FAILED
+}
+
+// ---------------------------------------------------------------------------
+// Identity, RBAC
+// ---------------------------------------------------------------------------
+
+/// principal موحّد لكل من يسجّل دخول (إداري أو عضو) — يبسّط RBAC و Audit Log
+model User {
+  id           String    @id @default(cuid())
+  email        String?   @unique
+  passwordHash String? // للإداريين فقط، الأعضاء يدخلون عبر OTP بدون كلمة مرور
+  roleId       String
+  role         Role      @relation(fields: [roleId], references: [id])
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  lastLoginIp  String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  member        Member?
+  sessions      Session[]
+  auditLogs     AuditLog[]
+  notifications Notification[]
+  otpCodes      OtpCode[]
+
+  @@index([roleId])
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  key         String   @unique // SUPER_ADMIN, SYSTEM_ADMIN, VOTING_MANAGER, MEMBER, ...
+  name        String
+  description String?
+  isSystem    Boolean  @default(false) // أدوار النظام الأساسية لا يمكن حذفها
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users           User[]
+  rolePermissions RolePermission[]
+}
+
+model Permission {
+  id          String   @id @default(cuid())
+  key         String   @unique // مثال: members.create, votings.publish
+  group       String // members, votings, settings...
+  description String?
+  createdAt   DateTime @default(now())
+
+  rolePermissions RolePermission[]
+}
+
+model RolePermission {
+  id           String     @id @default(cuid())
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+}
+
+/// جلسات Refresh Token (تدوير + إبطال)
+model Session {
+  id               String    @id @default(cuid())
+  userId           String
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokenHash String
+  userAgent        String?
+  ipAddress        String?
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Members
+// ---------------------------------------------------------------------------
+
+model Member {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  fullName               String
+  nationalId              String            @unique
+  phone                   String            @unique
+  email                   String?
+  avatarUrl               String?
+  membershipNumberReal    String?           @unique // يُدخل يدويًا (اختياري)
+  membershipNumberSystem  String            @unique // يُولَّد تلقائيًا وفريد دومًا
+  votingWeight            Decimal           @default(1) @db.Decimal(12, 4)
+  status                  MembershipStatus  @default(ACTIVE)
+  membershipStartDate     DateTime          @default(now())
+  membershipEndDate       DateTime?
+  isVotingEligible        Boolean           @default(true) // الأهلية الأساسية للتصويت
+  adminNotes              String?
+  lastLoginAt             DateTime?
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
+  deletedAt               DateTime? // Soft delete
+
+  groupMemberships     GroupMember[]
+  meetingInvitations   MeetingInvitee[]
+  votingTargets        VotingTargetMember[]
+  eligibilities        VotingEligibility[]
+  participations       VoteParticipation[]
+  votes                Vote[]
+  confirmations        VoteConfirmation[]
+  notifications        Notification[]      @relation("MemberNotifications")
+
+  @@index([status])
+  @@index([fullName])
+}
+
+model Group {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  type        String   @default("CUSTOM") // GENERAL_ASSEMBLY, BOARD, COMMITTEE, BRANCH, CUSTOM
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  members  GroupMember[]
+  votings  Voting[]      @relation("VotingTargetGroup")
+}
+
+model GroupMember {
+  id       String   @id @default(cuid())
+  groupId  String
+  memberId String
+  group    Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  member   Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  addedAt  DateTime @default(now())
+
+  @@unique([groupId, memberId])
+  @@index([memberId])
+}
+
+// ---------------------------------------------------------------------------
+// Meetings
+// ---------------------------------------------------------------------------
+
+model Meeting {
+  id          String        @id @default(cuid())
+  title       String
+  description String?
+  date        DateTime
+  startTime   DateTime
+  endTime     DateTime
+  location    String?
+  mode        MeetingMode   @default(IN_PERSON)
+  status      MeetingStatus @default(SCHEDULED)
+  createdById String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  deletedAt   DateTime?
+
+  invitees MeetingInvitee[]
+  votings  Voting[]
+  attachments Attachment[]
+}
+
+model MeetingInvitee {
+  id        String   @id @default(cuid())
+  meetingId String
+  memberId  String
+  meeting   Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  member    Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  invitedAt DateTime @default(now())
+
+  @@unique([meetingId, memberId])
+}
+
+// ---------------------------------------------------------------------------
+// Voting — قلب النظام
+// ---------------------------------------------------------------------------
+
+model Voting {
+  id          String @id @default(cuid())
+  meetingId   String?
+  meeting     Meeting? @relation(fields: [meetingId], references: [id])
+
+  title       String
+  description String?
+  legalText   String? // النص القانوني/التوضيحي للقرار
+
+  kind   VotingKind   @default(STANDARD)
+  status VotingStatus @default(DRAFT)
+
+  startAt  DateTime
+  endAt    DateTime
+  timezone String   @default("Asia/Riyadh")
+
+  isSecret             Boolean @default(false) // سري / علني
+  allowVoteChange      Boolean @default(false) // السماح بتغيير الصوت قبل الإغلاق
+  requiresFinalApproval Boolean @default(false) // يحتاج اعتماد إداري نهائي بعد الإغلاق
+  isWeighted           Boolean @default(true)
+  resultsVisibleToMembers Boolean @default(true) // إظهار النتائج للأعضاء بعد الإغلاق
+
+  quorumType  QuorumType @default(NONE)
+  quorumValue Decimal?   @db.Decimal(12, 4) // نسبة أو عدد ثابت حسب النوع
+
+  targetType    VotingTargetType @default(ALL)
+  targetGroupId String?
+  targetGroup   Group?           @relation("VotingTargetGroup", fields: [targetGroupId], references: [id])
+
+  createdById String?
+  publishedAt DateTime?
+  openedAt    DateTime?
+  closedAt    DateTime?
+  cancelledAt DateTime?
+
+  resultsFinalizedAt DateTime?
+  resultsCacheJson   Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  questions      VotingQuestion[]
+  targetMembers  VotingTargetMember[]
+  eligibilities  VotingEligibility[]
+  participations VoteParticipation[]
+  votes          Vote[]
+  confirmations  VoteConfirmation[]
+  notifications  Notification[]
+  attachments    Attachment[]
+  smsLogs        SmsLog[]
+  emailLogs      EmailLog[]
+
+  @@index([status])
+  @@index([startAt, endAt])
+}
+
+model VotingTargetMember {
+  id       String @id @default(cuid())
+  votingId String
+  memberId String
+  voting   Voting @relation(fields: [votingId], references: [id], onDelete: Cascade)
+  member   Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([votingId, memberId])
+}
+
+model Attachment {
+  id           String   @id @default(cuid())
+  votingId     String?
+  meetingId    String?
+  voting       Voting?  @relation(fields: [votingId], references: [id], onDelete: Cascade)
+  meeting      Meeting? @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  fileName     String
+  filePath     String
+  mimeType     String
+  sizeBytes    Int
+  uploadedById String?
+  createdAt    DateTime @default(now())
+}
+
+model VotingQuestion {
+  id          String       @id @default(cuid())
+  votingId    String
+  voting      Voting       @relation(fields: [votingId], references: [id], onDelete: Cascade)
+  order       Int          @default(0)
+  type        QuestionType
+  text        String
+  description String?
+
+  // قواعد الاختيار المتعدد/الانتخابات
+  minSelections     Int?
+  maxSelections     Int?
+  seatsCount        Int? // عدد المقاعد للانتخابات
+  requireExactCount Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  options VotingOption[]
+  votes   Vote[]
+}
+
+model VotingOption {
+  id          String  @id @default(cuid())
+  questionId  String
+  question    VotingQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  order       Int     @default(0)
+  label       String
+  description String?
+  createdAt   DateTime @default(now())
+
+  candidate Candidate?
+}
+
+model Candidate {
+  id        String       @id @default(cuid())
+  optionId  String       @unique
+  option    VotingOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  bio       String?
+  photoUrl  String?
+  createdAt DateTime     @default(now())
+}
+
+/// Snapshot لحظة فتح التصويت — Section 37: لا تتأثر النتائج بتغيّر بيانات العضو لاحقًا
+model VotingEligibility {
+  id             String   @id @default(cuid())
+  votingId       String
+  memberId       String
+  voting         Voting   @relation(fields: [votingId], references: [id], onDelete: Cascade)
+  member         Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  snapshotWeight Decimal  @db.Decimal(12, 4)
+  snapshotStatus MembershipStatus
+  isEligible     Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  @@unique([votingId, memberId])
+  @@index([votingId])
+}
+
+/// إثبات مشاركة العضو — الحاجز الأساسي لمنع التصويت المكرر ولإخفاء الهوية في التصويت السري
+model VoteParticipation {
+  id             String   @id @default(cuid())
+  votingId       String
+  memberId       String
+  voting         Voting   @relation(fields: [votingId], references: [id], onDelete: Cascade)
+  member         Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  participatedAt DateTime @default(now())
+
+  @@unique([votingId, memberId])
+  @@index([votingId])
+}
+
+/// سجل الإجابة الفعلي — غير قابل للتعديل أو الحذف بعد إنشائه (Append-only، Section 38).
+/// عند isSecret=true: memberId = null (لا رابط مباشر بالعضو). voterToken يُستخدم داخليًا
+/// فقط لإيجاد "الجولة السابقة" عند السماح بتغيير التصويت (allowVoteChange) دون كشف الهوية
+/// لأي طرف خارج الخادم نفسه (HMAC أحادي الاتجاه بسرّ الخادم — راجع lib/voteIntegrity.ts).
+model Vote {
+  id             String  @id @default(cuid())
+  votingId       String
+  questionId     String
+  memberId       String? // null عند isSecret = true (تصويت علني/Recorded فقط يحمل القيمة)
+  voterToken     String // HMAC(votingId+memberId) — لإيجاد/استبدال الجولة السابقة عند تغيير الصوت
+  castByProxyOfMemberId String? // نقطة توسّع مستقبلية: التصويت بالوكالة (غير مُفعّل حاليًا)
+
+  selectedOptionIds Json // string[] — لأنواع الاختيار
+  rankingJson       Json? // ترتيب المرشحين
+  ratingValue       Int? // تقييم 1-5 / 1-10
+  percentageValue   Decimal? @db.Decimal(5, 2)
+  textValue         String?
+  // وزن العضو لحظة التصويت (منسوخ من VotingEligibility) — يسمح باحتساب النتائج
+  // الموزونة بدقة حتى في التصويت السري حيث لا يوجد ربط مباشر بـ memberId
+  weightAtVote      Decimal  @db.Decimal(12, 4)
+
+  // عند تفعيل allowVoteChange: الجولة السابقة تُعلَّم هنا (لا تُحذف ولا تُعدَّل) وتُستبعد من الاحتساب
+  supersededAt DateTime?
+
+  voting   Voting          @relation(fields: [votingId], references: [id], onDelete: Cascade)
+  question VotingQuestion  @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  member   Member?         @relation(fields: [memberId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([votingId, questionId, supersededAt])
+  @@index([voterToken])
+}
+
+/// الاعتماد الرسمي النهائي للتصويت (Section 20) — سجل غير قابل للتعديل.
+/// عند السماح بتغيير التصويت، الاعتماد الجديد "يستبدل" (supersededAt) السابق دون حذفه.
+model VoteConfirmation {
+  id              String   @id @default(cuid())
+  votingId        String
+  memberId        String
+  voting          Voting   @relation(fields: [votingId], references: [id], onDelete: Cascade)
+  member          Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  referenceNumber String   @unique // VOTE-2026-000001
+  confirmedAt     DateTime @default(now())
+  ipAddress       String?
+  userAgent       String?
+  otpVerified     Boolean  @default(false)
+  supersededAt    DateTime?
+  createdAt       DateTime @default(now())
+
+  signature VoteSignature?
+
+  @@index([votingId, memberId, supersededAt])
+}
+
+/// بصمة تكامل (Hash) للتحقق لاحقًا من عدم العبث بالبيانات
+model VoteSignature {
+  id                 String           @id @default(cuid())
+  voteConfirmationId String           @unique
+  voteConfirmation   VoteConfirmation @relation(fields: [voteConfirmationId], references: [id], onDelete: Cascade)
+  algorithm          String           @default("SHA-256")
+  hash               String
+  payloadSummaryJson Json
+  createdAt          DateTime         @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Notifications / SMS / Email
+// ---------------------------------------------------------------------------
+
+model Notification {
+  id              String            @id @default(cuid())
+  userId          String?
+  user            User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  memberId        String?
+  member          Member?           @relation("MemberNotifications", fields: [memberId], references: [id], onDelete: Cascade)
+  type            NotificationType
+  title           String
+  body            String
+  isRead          Boolean           @default(false)
+  relatedVotingId String?
+  voting          Voting?           @relation(fields: [relatedVotingId], references: [id])
+  createdAt       DateTime          @default(now())
+
+  @@index([memberId, isRead])
+}
+
+model SmsLog {
+  id               String        @id @default(cuid())
+  toPhone          String
+  message          String
+  provider         String
+  status           MessageStatus @default(PENDING)
+  providerResponse Json?
+  errorMessage     String?
+  relatedMemberId  String?
+  relatedVotingId  String?
+  voting           Voting?       @relation(fields: [relatedVotingId], references: [id])
+  sentById         String?
+  createdAt        DateTime      @default(now())
+
+  @@index([relatedMemberId])
+}
+
+model EmailLog {
+  id               String        @id @default(cuid())
+  toEmail          String
+  subject          String
+  body             String
+  status           MessageStatus @default(PENDING)
+  providerResponse Json?
+  errorMessage     String?
+  relatedMemberId  String?
+  relatedVotingId  String?
+  voting           Voting?       @relation(fields: [relatedVotingId], references: [id])
+  sentById         String?
+  createdAt        DateTime      @default(now())
+
+  @@index([relatedMemberId])
+}
+
+// ---------------------------------------------------------------------------
+// Audit / Settings / OTP / Security
+// ---------------------------------------------------------------------------
+
+/// سجل تدقيق شامل — Append-only. لا يوجد أي مسار API لحذف أو تعديل سجلاته.
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String // LOGIN, LOGIN_FAILED, VOTE_CAST, VOTE_CONFIRMED, MEMBER_CREATED, ...
+  entity    String // Member, Voting, Vote, System...
+  entityId  String?
+  oldValue  Json?
+  newValue  Json?
+  ipAddress String?
+  userAgent String?
+  requestId String?
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([userId])
+  @@index([createdAt])
+  @@index([action])
+}
+
+model SystemSetting {
+  id          String   @id @default(cuid())
+  category    String // general, voting, sms, email, security, notifications
+  key         String
+  value       Json
+  isSecret    Boolean  @default(false) // القيم الحسّاسة (مفاتيح API) — تُشفَّر قبل التخزين ولا تُعاد كاملة عبر API
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  @@unique([category, key])
+}
+
+model OtpCode {
+  id          String     @id @default(cuid())
+  purpose     OtpPurpose
+  channel     OtpChannel
+  identifier  String // رقم الجوال أو البريد المُرسل إليه
+  codeHash    String
+  userId      String?
+  user        User?      @relation(fields: [userId], references: [id])
+  expiresAt   DateTime
+  attempts    Int        @default(0)
+  maxAttempts Int        @default(5)
+  consumedAt  DateTime?
+  requestIp   String?
+  createdAt   DateTime   @default(now())
+
+  @@index([identifier, purpose])
+}
+
+model LoginAttempt {
+  id         String   @id @default(cuid())
+  identifier String
+  success    Boolean
+  ipAddress  String?
+  userAgent  String?
+  reason     String?
+  createdAt  DateTime @default(now())
+
+  @@index([identifier, createdAt])
+  @@index([ipAddress, createdAt])
+}
+
+model MemberImportJob {
+  id           String           @id @default(cuid())
+  fileName     String
+  uploadedById String?
+  status       ImportJobStatus  @default(PENDING)
+  totalRows    Int              @default(0)
+  validRows    Int              @default(0)
+  invalidRows  Int              @default(0)
+  importedRows Int              @default(0)
+  startedAt    DateTime         @default(now())
+  finishedAt   DateTime?
+  createdAt    DateTime         @default(now())
+  validRowsJson Json? // الصفوف الصالحة بانتظار الاعتماد (Preview قبل الاستيراد الفعلي)
+  committedAt   DateTime?
+
+  errors MemberImportError[]
+}
+
+model MemberImportError {
+  id           String          @id @default(cuid())
+  jobId        String
+  job          MemberImportJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  rowNumber    Int
+  rawDataJson  Json
+  errorMessage String
+  createdAt    DateTime        @default(now())
+
+  @@index([jobId])
+}

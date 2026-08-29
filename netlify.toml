@@ -2,6 +2,9 @@
   command = "gatsby build"
   functions = "netlify/functions"
   publish = "public"
+  # ga-voting-system/ is a separate, self-contained project (Next.js + Node API)
+  # deployed on its own — skip this Gatsby site's build when a change only touches it.
+  ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- . ':!ga-voting-system'"
 
 [[plugins]]
   package = "@netlify/plugin-gatsby"
